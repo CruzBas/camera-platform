@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CameraPlatform.Api/CameraPlatform.Api.csproj" />
+    <Project Path="src/CameraPlatform.Application/CameraPlatform.Application.csproj" />
+    <Project Path="src/CameraPlatform.Domain/CameraPlatform.Domain.csproj" />
+    <Project Path="src/CameraPlatform.Infrastructure/CameraPlatform.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CameraPlatform.Tests/CameraPlatform.Tests.csproj" />
+  </Folder>
+</Solution>
