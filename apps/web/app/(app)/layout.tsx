@@ -33,7 +33,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <BrandLogo size="sm" />
           <BrandWordmark />
         </Link>
-        {/* La ruta activa se conoce recién en la petición (p. ej. /cameras/[id]): Suspense evita bloquear el prerender. */}
         <Suspense fallback={<NavLinks pathname={null} />}>
           <CurrentNavLinks />
         </Suspense>

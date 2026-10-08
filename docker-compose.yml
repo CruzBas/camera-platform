@@ -4,10 +4,13 @@
 
 services:
   streaming:
-    image: bluenviron/mediamtx:1.21.1
+    # Variante con ffmpeg: web-stream.sh transcodifica a H.264 las cámaras que el navegador no puede
+    # reproducir por WebRTC (p. ej. H.265).
+    image: bluenviron/mediamtx:1.21.1-ffmpeg
     restart: unless-stopped
     volumes:
       - ./services/streaming/mediamtx.yml:/mediamtx.yml:ro
+      - ./services/streaming/web-stream.sh:/web-stream.sh:ro
     environment:
       MTX_AUTHINTERNALUSERS_1_PASS: ${MEDIAMTX_API_PASSWORD:?Falta en .env (scripts/setup-env.sh)}
     ports:

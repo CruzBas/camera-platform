@@ -42,14 +42,17 @@ Cámara ──RTSP──▶ MediaMTX (streaming)                               �
    Protection) y crea el path `streamKey` en MediaMTX por su API de control (puerto 9997, interno).
    - **RTSP:** MediaMTX se conecta a la cámara y lee el video.
    - **Push:** el path queda esperando a que alguien publique (`scripts/mac-camera.sh`).
+   - Además crea `<streamKey>_web`, el path que lee el navegador. Cuando la cámara entra en línea,
+     MediaMTX ejecuta `services/streaming/web-stream.sh`: copia el video si ya es H.264 y si no (p. ej.
+     H.265, que los navegadores no reproducen por WebRTC) lo transcodifica a H.264.
 3. `StreamingSyncWorker` corre `StreamingReconciler` cada 10 s: compara las cámaras de la base con los
    paths de MediaMTX, crea o corrige los que faltan y elimina los huérfanos. Así sobrevive a reinicios
    de MediaMTX (que no persiste los paths creados por API) y a cambios que fallaron en su momento.
 
 ### 2. Video en el navegador
 
-El componente `WhepPlayer` negocia WebRTC con MediaMTX por WHEP (`http://localhost:8889/<streamKey>/whep`)
-y reconecta solo si el stream se corta. El video nunca pasa por la API.
+El componente `WhepPlayer` negocia WebRTC con MediaMTX por WHEP
+(`http://localhost:8889/<streamKey>_web/whep`) y reconecta solo si el stream se corta. El video nunca pasa por la API.
 
 ### 3. Análisis con YOLO (`services/vision`)
 

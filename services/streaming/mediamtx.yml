@@ -3,6 +3,8 @@
 #
 # Los paths (uno por cámara) no se definen aquí: los crea la API de la plataforma a partir de las
 # cámaras registradas, a través de la API de control (puerto 9997, solo dentro de la red de Docker).
+# Cada cámara tiene dos: `<streamKey>` (video original, para la visión) y `<streamKey>_web` (H.264 para
+# el navegador, publicado por web-stream.sh).
 logLevel: info
 
 # Solo los protocolos que la plataforma usa.

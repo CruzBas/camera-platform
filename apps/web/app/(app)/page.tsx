@@ -19,7 +19,6 @@ const STATUS_REFRESH_MS = 5000;
 type Bus = {
   camera: Camera;
   status: CameraStatusSummary | undefined;
-  /** Personas en el último frame analizado; null sin análisis reciente. */
   people: number | null;
 };
 

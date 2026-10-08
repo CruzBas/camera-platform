@@ -113,6 +113,7 @@ export function useApi<T>(path: string | null, refreshMs?: number) {
   return { data, error, reload: load, setData };
 }
 
+/** El path `_web` lo crea la API en MediaMTX: siempre en H.264, aunque la cámara envíe H.265. */
 export function whepUrl(streamKey: string) {
-  return `${process.env.NEXT_PUBLIC_WEBRTC_URL}/${streamKey}/whep`;
+  return `${process.env.NEXT_PUBLIC_WEBRTC_URL}/${streamKey}_web/whep`;
 }

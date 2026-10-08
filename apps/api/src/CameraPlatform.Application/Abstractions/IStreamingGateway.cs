@@ -3,6 +3,7 @@ namespace CameraPlatform.Application.Abstractions;
 /// <summary>
 /// Gateway de video (MediaMTX). Cada cámara es un path identificado por su stream key.
 /// <c>sourceUrl</c> null significa que el path recibe video publicado (push) en lugar de leer RTSP.
+/// El gateway además expone cada cámara al navegador en un formato apto para WebRTC.
 /// </summary>
 public interface IStreamingGateway
 {
@@ -23,5 +24,6 @@ public sealed record StreamStatus(
     string? Codec,
     int? Width,
     int? Height,
+    /// <summary>Navegadores viendo el video (no cuenta la visión).</summary>
     int Viewers,
     long BytesReceived);
