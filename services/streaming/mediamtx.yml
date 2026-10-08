@@ -1,0 +1,36 @@
+# MediaMTX: gateway de video. Recibe el video de cada cámara y lo entrega al navegador (WebRTC)
+# y al servicio de visión (RTSP).
+#
+# Los paths (uno por cámara) no se definen aquí: los crea la API de la plataforma a partir de las
+# cámaras registradas, a través de la API de control (puerto 9997, solo dentro de la red de Docker).
+logLevel: info
+
+# Solo los protocolos que la plataforma usa.
+rtsp: true
+rtmp: false
+hls: false
+srt: false
+moq: false
+webrtc: true
+api: true
+
+authInternalUsers:
+  # Lectura y publicación sin credenciales. Los puertos se publican solo en 127.0.0.1
+  # (ver docker-compose.yml) y solo existen los paths que la plataforma configura.
+  - user: any
+    permissions:
+      - action: publish
+      - action: read
+  # La API de la plataforma. La contraseña real llega por MTX_AUTHINTERNALUSERS_1_PASS desde .env.
+  - user: platform
+    pass: definido-por-env
+    permissions:
+      - action: api
+
+webrtcAddress: :8889
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: :8189
+# Docker Desktop no enruta hacia las IPs internas del contenedor: anunciamos el host.
+webrtcAdditionalHosts: [127.0.0.1]
+
+paths: {}

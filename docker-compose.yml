@@ -1,0 +1,80 @@
+# Plataforma completa menos el dashboard (apps/web), que en desarrollo corre con `npm run dev`.
+# Los secretos vienen de .env (créalo con scripts/setup-env.sh).
+# Todos los puertos se publican solo en 127.0.0.1: nada queda expuesto a la red local ni a Internet.
+
+services:
+  streaming:
+    image: bluenviron/mediamtx:1.21.1
+    restart: unless-stopped
+    volumes:
+      - ./services/streaming/mediamtx.yml:/mediamtx.yml:ro
+    environment:
+      MTX_AUTHINTERNALUSERS_1_PASS: ${MEDIAMTX_API_PASSWORD:?Falta en .env (scripts/setup-env.sh)}
+    ports:
+      - "127.0.0.1:8554:8554"     # RTSP: publicación de la webcam de la Mac y lectura
+      - "127.0.0.1:8889:8889"     # WebRTC/WHEP (señalización HTTP)
+      - "127.0.0.1:8189:8189/udp" # WebRTC media (UDP)
+      - "127.0.0.1:8189:8189"     # WebRTC media (TCP, respaldo)
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: camera_platform
+      POSTGRES_USER: camera_platform
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta en .env (scripts/setup-env.sh)}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5433:5432" # 5433 en el host: no choca con un PostgreSQL local
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U camera_platform -d camera_platform"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./apps/api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      streaming:
+        condition: service_started
+    environment:
+      ConnectionStrings__Default: Host=postgres;Database=camera_platform;Username=camera_platform;Password=${POSTGRES_PASSWORD};Gss Encryption Mode=Disable
+      MediaMtx__ApiPassword: ${MEDIAMTX_API_PASSWORD}
+      Vision__ApiKey: ${VISION_API_KEY:?Falta en .env (scripts/setup-env.sh)}
+      Admin__Email: ${ADMIN_EMAIL:?Falta en .env (scripts/setup-env.sh)}
+      Admin__Password: ${ADMIN_PASSWORD:?Falta en .env (scripts/setup-env.sh)}
+    volumes:
+      - dataprotection-keys:/keys
+    ports:
+      - "127.0.0.1:5080:8080"
+    healthcheck:
+      # La imagen de ASP.NET no trae curl: petición HTTP mínima con bash.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q Healthy <&3"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  vision:
+    build: ./services/vision
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      PLATFORM_API_URL: http://api:8080
+      VISION_API_KEY: ${VISION_API_KEY}
+      STREAM_BASE_URL: rtsp://streaming:8554
+      ANALYSIS_FPS: ${ANALYSIS_FPS:-2}
+      # Hilos de PyTorch por inferencia. Más hilos compiten con la decodificación del video y
+      # empeoran la latencia (medido en Docker sobre Mac: 8 hilos ≈ 560 ms, 2 hilos ≈ 200 ms).
+      OMP_NUM_THREADS: ${INFERENCE_THREADS:-2}
+    ports:
+      - "127.0.0.1:8000:8000"
+
+volumes:
+  pgdata:
+  dataprotection-keys:
