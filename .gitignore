@@ -1,0 +1,18 @@
+# Secretos: credenciales RTSP y configuración local
+.env
+.env.local
+
+node_modules/
+.DS_Store
+
+# Claves de cifrado de desarrollo (dotnet run fuera de Docker)
+.keys/
+
+# Artefactos de compilación
+bin/
+obj/
+__pycache__/
+.venv/
+
+# Configuración local del editor
+.vscode/
