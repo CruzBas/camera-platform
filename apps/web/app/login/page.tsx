@@ -32,7 +32,6 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await api("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
-      // Solo rutas internas: evita redirecciones abiertas a otros dominios.
       const next = new URLSearchParams(window.location.search).get("next");
       window.location.href = next?.startsWith("/") && !next.startsWith("//") ? next : "/";
     } catch (err) {
