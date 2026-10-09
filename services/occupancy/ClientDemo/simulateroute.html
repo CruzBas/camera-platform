@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Simulador de rutas</title>
+<style>
+  :root {
+    --bg: #f4f6f9;
+    --panel: #ffffff;
+    --text: #1c2430;
+    --muted: #667085;
+    --line: #e3e7ee;
+    --code-bg: #f7f9fc;
+    --ok: #1a7f37;
+    --warn: #b54708;
+    --error: #c0362c;
+    --accent: #1f6feb;
+    --flash: #e8f0fe;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f141b;
+      --panel: #161c25;
+      --text: #e6eaf0;
+      --muted: #8b95a5;
+      --line: #263041;
+      --code-bg: #10161f;
+      --ok: #3fb950;
+      --warn: #e3a008;
+      --error: #f47067;
+      --accent: #4c8dff;
+      --flash: #1c2a44;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); }
+
+  header { padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  h1 { margin: 0 0 2px; font-size: 18px; }
+  h2 { margin: 16px 0 8px; font-size: 15px; }
+  .intro { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  label { font-size: 13px; color: var(--muted); }
+  input, button {
+    font: inherit;
+    font-size: 14px;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 6px 10px;
+  }
+  input.point { width: 200px; font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; font-size: 13px; }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+
+  main { padding: 0 16px 40px; max-width: 1100px; margin: 0 auto; }
+  .samples { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; }
+  .sample { text-align: left; padding: 8px 10px; }
+  .sample strong { display: block; font-size: 13px; }
+  .sample code { font-size: 11px; color: var(--muted); }
+
+  .empty { color: var(--muted); font-size: 14px; }
+  ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .entry { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; animation: flash 1.2s ease-out; }
+  @keyframes flash { from { background: var(--flash); } to { background: var(--panel); } }
+  .entry summary {
+    display: grid;
+    grid-template-columns: 74px 44px minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 4px 10px;
+    padding: 8px 12px;
+    cursor: pointer;
+    list-style: none;
+    font-variant-numeric: tabular-nums;
+  }
+  .entry summary::-webkit-details-marker { display: none; }
+  .time { color: var(--muted); font-size: 13px; }
+  .method { font-size: 12px; font-weight: 700; color: var(--accent); }
+  .url { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; font-size: 13px; overflow-wrap: anywhere; }
+  .meta { font-size: 12px; color: var(--muted); white-space: nowrap; text-align: right; }
+  .code { font-weight: 700; }
+  .code.ok { color: var(--ok); }
+  .code.client { color: var(--warn); }
+  .code.error { color: var(--error); }
+  .summary-text { grid-column: 3 / 5; font-size: 13px; color: var(--muted); }
+  .entry[open] .summary-text::before { content: '▾ '; }
+  .entry:not([open]) .summary-text::before { content: '▸ '; }
+  pre {
+    margin: 0;
+    padding: 10px 12px;
+    max-height: 600px;
+    overflow: auto;
+    background: var(--code-bg);
+    border-top: 1px solid var(--line);
+    border-radius: 0 0 8px 8px;
+    font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  @media (max-width: 640px) {
+    .entry summary { grid-template-columns: 64px 38px minmax(0, 1fr); }
+    .meta { grid-column: 3; text-align: left; }
+    .summary-text { grid-column: 1 / 4; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Simulador de rutas · Occupancy API</h1>
+  <p class="intro">
+    Escriba el origen y el destino como <code>lat,lon</code>, o elija un ejemplo, y presione <b>Consultar</b>.
+    La página llama a <code>GET /api/v1/trips/plan</code> igual que lo haría una app, con los buses en vivo de la línea de Coronado,
+    y muestra la respuesta tal cual; la más reciente queda arriba.
+  </p>
+  <form class="controls" id="form">
+    <label>Origen (from) <input id="from" class="point" placeholder="9.9620,-84.0300" required /></label>
+    <label>Destino (to) <input id="to" class="point" placeholder="9.9330,-84.0790" required /></label>
+    <button id="swap" type="button" title="Intercambiar origen y destino">⇄</button>
+    <button class="primary" type="submit">Consultar</button>
+    <button id="clear" type="button">Limpiar</button>
+  </form>
+</header>
+
+<main>
+  <h2>Ejemplos</h2>
+  <div class="samples" id="samples"></div>
+
+  <h2>Respuestas</h2>
+  <p class="empty" id="empty">Todavía no hay consultas.</p>
+  <ol id="log"></ol>
+</main>
+
+<script>
+  // Origins and destinations along the Coronado line; the ones marked "transbordo" change buses at the terminal.
+  const samples = [
+    ['Ipís → San José centro', '9.9620,-84.0300', '9.9330,-84.0790'],
+    ['San José centro → Guadalupe', '9.9330,-84.0790', '9.9480,-84.0560'],
+    ['Guadalupe → Terminal de Coronado', '9.9480,-84.0560', '9.9761,-84.0073'],
+    ['Terminal de Coronado → San José centro', '9.9761,-84.0073', '9.9330,-84.0790'],
+    ['San José centro → Las Nubes (transbordo)', '9.9330,-84.0790', '9.9882,-83.9605'],
+    ['Dulce Nombre → Ipís (transbordo)', '9.9843,-84.0154', '9.9620,-84.0300'],
+    ['Cascajal → Patalillo (transbordo)', '10.0377,-83.9298', '9.9735,-84.0264'],
+    ['Patio de Agua → San José centro (transbordo)', '9.9759,-83.9664', '9.9330,-84.0790'],
+    ['San Rafael → Guadalupe (transbordo)', '9.9807,-83.9918', '9.9480,-84.0560'],
+    ['San José centro, distancia corta (a pie)', '9.9330,-84.0790', '9.9360,-84.0770'],
+  ]
+
+  const fromInput = document.getElementById('from')
+  const toInput = document.getElementById('to')
+  const log = document.getElementById('log')
+  const empty = document.getElementById('empty')
+
+  for (const [name, from, to] of samples) {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'sample'
+    const title = document.createElement('strong')
+    title.textContent = name
+    const coords = document.createElement('code')
+    coords.textContent = `${from} → ${to}`
+    button.append(title, coords)
+    button.addEventListener('click', () => {
+      fromInput.value = from
+      toInput.value = to
+      plan()
+    })
+    document.getElementById('samples').append(button)
+  }
+
+  function time(date) {
+    return date.toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+  }
+
+  function localTime(iso) {
+    return new Date(iso).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Costa_Rica' })
+  }
+
+  // One line saying what the response contains; the JSON below is the response as is.
+  function summarize(body) {
+    if (!body?.options) return body?.title ?? ''
+    const best = body.options[0]
+    if (!best) return body.message ?? 'Sin opciones'
+    const buses = best.legs.filter((leg) => leg.type === 'BUS')
+      .map((leg) => `${leg.bus.vehicleId} (${leg.bus.routeName}) pasa ${localTime(leg.departAt)}`)
+    return `${body.options.length} opción(es) · mejor: ${Math.round(best.durationMinutes)} min, llegada ${localTime(best.arriveAt)}` +
+      (buses.length ? ` · ${buses.join(' → ')}` : ' · a pie')
+  }
+
+  function addEntry({ at, url, code, codeText, ms, bytes, body, error }) {
+    empty.hidden = true
+    for (const open of log.querySelectorAll('details[open]')) open.open = false
+    const item = document.createElement('li')
+    const details = document.createElement('details')
+    details.className = 'entry'
+    details.open = true
+    const summary = document.createElement('summary')
+    for (const [className, text] of [['time', time(at)], ['method', 'GET'], ['url', url]]) {
+      const span = document.createElement('span')
+      span.className = className
+      span.textContent = text
+      summary.append(span)
+    }
+    const meta = document.createElement('span')
+    meta.className = 'meta'
+    const codeSpan = document.createElement('span')
+    codeSpan.className = `code ${error || code >= 500 ? 'error' : code >= 400 ? 'client' : 'ok'}`
+    codeSpan.textContent = error ? 'sin respuesta' : `${code} ${codeText}`
+    meta.append(codeSpan, ` · ${ms} ms${bytes != null ? ` · ${(bytes / 1024).toFixed(1)} KB` : ''}`)
+    summary.append(meta)
+    const text = document.createElement('span')
+    text.className = 'summary-text'
+    text.textContent = error ?? summarize(body)
+    summary.append(text)
+    details.append(summary)
+    if (body != null) {
+      const pre = document.createElement('pre')
+      pre.textContent = JSON.stringify(body, null, 2)
+      details.append(pre)
+    }
+    item.append(details)
+    log.prepend(item)
+    while (log.children.length > 50) log.lastElementChild.remove()
+  }
+
+  async function plan() {
+    const from = fromInput.value.replace(/\s/g, '')
+    const to = toInput.value.replace(/\s/g, '')
+    const url = `/api/v1/trips/plan?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
+    const at = new Date()
+    const started = performance.now()
+    try {
+      const response = await fetch(url, { headers: { Accept: 'application/json' } })
+      const raw = await response.text()
+      let body = null
+      try { body = raw ? JSON.parse(raw) : null } catch { body = { raw } }
+      addEntry({ at, url: decodeURIComponent(url), code: response.status, codeText: response.statusText, ms: Math.round(performance.now() - started), bytes: new Blob([raw]).size, body })
+    } catch (error) {
+      addEntry({ at, url: decodeURIComponent(url), ms: Math.round(performance.now() - started), error: `Error de red: ${error.message}` })
+    }
+  }
+
+  document.getElementById('form').addEventListener('submit', (event) => {
+    event.preventDefault()
+    plan()
+  })
+  document.getElementById('swap').addEventListener('click', () => {
+    [fromInput.value, toInput.value] = [toInput.value, fromInput.value]
+  })
+  document.getElementById('clear').addEventListener('click', () => {
+    log.replaceChildren()
+    empty.hidden = false
+  })
+
+  // A shared address (?from=…&to=…) fills the form and asks right away.
+  const params = new URL(location.href).searchParams
+  if (params.get('from') && params.get('to')) {
+    fromInput.value = params.get('from')
+    toInput.value = params.get('to')
+    plan()
+  }
+</script>
+</body>
+</html>

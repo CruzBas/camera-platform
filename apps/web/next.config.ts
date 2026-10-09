@@ -21,7 +21,6 @@ const nextConfig: NextConfig = {
     return [
       { source: "/api/:path*", destination: `${apiUrl}/api/:path*` },
       { source: "/hubs/:path*", destination: `${apiUrl}/hubs/:path*` },
-      { source: "/occupancy/:path*", destination: `${occupancyApiUrl}/:path*` },
     ];
   },
 };

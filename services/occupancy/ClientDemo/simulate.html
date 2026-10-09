@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Simulador de cliente</title>
+<style>
+  :root {
+    --bg: #f4f6f9;
+    --panel: #ffffff;
+    --text: #1c2430;
+    --muted: #667085;
+    --line: #e3e7ee;
+    --code-bg: #f7f9fc;
+    --ok: #1a7f37;
+    --warn: #b54708;
+    --error: #c0362c;
+    --accent: #1f6feb;
+    --flash: #e8f0fe;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f141b;
+      --panel: #161c25;
+      --text: #e6eaf0;
+      --muted: #8b95a5;
+      --line: #263041;
+      --code-bg: #10161f;
+      --ok: #3fb950;
+      --warn: #e3a008;
+      --error: #f47067;
+      --accent: #4c8dff;
+      --flash: #1c2a44;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); }
+
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 12px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+  }
+  h1 { margin: 0 0 2px; font-size: 18px; }
+  .intro { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+  label { font-size: 13px; color: var(--muted); }
+  select, button {
+    font: inherit;
+    font-size: 14px;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 5px 9px;
+  }
+  select#bus { min-width: 190px; }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .status { margin-left: auto; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .status .live { color: var(--ok); font-weight: 600; }
+  .status .paused { color: var(--warn); font-weight: 600; }
+
+  main { padding: 12px 16px 40px; max-width: 1100px; margin: 0 auto; }
+  .empty { color: var(--muted); font-size: 14px; }
+  ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+
+  .entry {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    animation: flash 1.2s ease-out;
+  }
+  @keyframes flash { from { background: var(--flash); } to { background: var(--panel); } }
+  .entry summary {
+    display: grid;
+    grid-template-columns: 74px 44px minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 4px 10px;
+    padding: 8px 12px;
+    cursor: pointer;
+    list-style: none;
+    font-variant-numeric: tabular-nums;
+  }
+  .entry summary::-webkit-details-marker { display: none; }
+  .time { color: var(--muted); font-size: 13px; }
+  .method { font-size: 12px; font-weight: 700; color: var(--accent); }
+  .url { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; font-size: 13px; overflow-wrap: anywhere; }
+  .meta { font-size: 12px; color: var(--muted); white-space: nowrap; text-align: right; }
+  .code { font-weight: 700; }
+  .code.ok { color: var(--ok); }
+  .code.client { color: var(--warn); }
+  .code.error { color: var(--error); }
+  .summary-text { grid-column: 3 / 5; font-size: 13px; color: var(--muted); }
+  .entry[open] .summary-text::before { content: '▾ '; }
+  .entry:not([open]) .summary-text::before { content: '▸ '; }
+  pre {
+    margin: 0;
+    padding: 10px 12px;
+    max-height: 420px;
+    overflow: auto;
+    background: var(--code-bg);
+    border-top: 1px solid var(--line);
+    border-radius: 0 0 8px 8px;
+    font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .divider { text-align: center; font-size: 12px; color: var(--muted); padding: 2px 0; }
+
+  @media (max-width: 640px) {
+    .entry summary { grid-template-columns: 64px 38px minmax(0, 1fr); }
+    .meta { grid-column: 3; text-align: left; }
+    .summary-text { grid-column: 1 / 4; }
+    .status { margin-left: 0; width: 100%; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Simulador de cliente · Occupancy API</h1>
+  <p class="intro">
+    Esta página consulta la API igual que lo haría una app cliente, por HTTP y solo con los endpoints de lectura.
+    La respuesta más reciente queda arriba.
+  </p>
+  <div class="controls">
+    <label>Bus
+      <select id="bus"><option value="">Todos los buses</option></select>
+    </label>
+    <label>Cada
+      <select id="interval">
+        <option value="2000">2 s</option>
+        <option value="5000" selected>5 s</option>
+        <option value="10000">10 s</option>
+        <option value="30000">30 s</option>
+      </select>
+    </label>
+    <button id="toggle" class="primary" type="button">Pausar</button>
+    <button id="clear" type="button">Limpiar</button>
+    <span class="status" id="status"></span>
+  </div>
+</header>
+
+<main>
+  <p class="empty" id="empty">Esperando la primera respuesta…</p>
+  <ol id="log"></ol>
+</main>
+
+<script>
+  // A client app polls the vehicle list (or one vehicle) often, and a bus's history and door
+  // events less often, only while that bus is open. This page does the same and logs every call.
+  const fastPollDefault = 5000
+  const detailPollMs = 15000
+  const maxEntries = 200
+  const hourMs = 60 * 60 * 1000
+
+  const busSelect = document.getElementById('bus')
+  const intervalSelect = document.getElementById('interval')
+  const toggleButton = document.getElementById('toggle')
+  const log = document.getElementById('log')
+  const empty = document.getElementById('empty')
+  const status = document.getElementById('status')
+
+  const statusLabels = {
+    EMPTY: 'Vacío',
+    MANY_SEATS_AVAILABLE: 'Muchos asientos',
+    FEW_SEATS_AVAILABLE: 'Pocos asientos',
+    STANDING_ROOM_ONLY: 'Solo de pie',
+    CRUSHED_STANDING_ROOM_ONLY: 'Muy lleno',
+    FULL: 'Lleno',
+  }
+  const compass = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO']
+
+  let running = true
+  let fastTimer = null
+  let detailTimer = null
+  let generation = 0
+  let calls = 0
+  const knownPlates = new Set()
+
+  // ---- Summaries: one line telling what the client learned from each response ----
+
+  function describeVehicle(v) {
+    const parts = [v.vehicleId]
+    if (v.stale) parts.push('sin reporte')
+    if (v.occupancy) {
+      parts.push(`${v.occupancy.passengerCount}/${v.occupancy.capacity} pasajeros`)
+      parts.push(statusLabels[v.occupancy.status] ?? v.occupancy.status)
+    }
+    if (v.location) {
+      const speed = v.location.speedKmh ?? 0
+      const heading = v.location.headingDeg
+      parts.push(speed > 0 ? `${speed} km/h${heading != null ? ' ' + compass[Math.round(heading / 45) % 8] : ''}` : 'detenido')
+    }
+    return parts.join(' · ')
+  }
+
+  function summarize(kind, body) {
+    if (body == null) return ''
+    if (body.title) return body.title
+    switch (kind) {
+      case 'list': {
+        const vehicles = body.vehicles ?? []
+        const moving = vehicles.filter((v) => (v.location?.speedKmh ?? 0) > 0).length
+        const stale = vehicles.filter((v) => v.stale).length
+        const riders = vehicles.reduce((sum, v) => sum + (v.occupancy?.passengerCount ?? 0), 0)
+        return `${vehicles.length} buses · ${moving} en movimiento · ${stale} sin reporte · ${riders} pasajeros a bordo`
+      }
+      case 'vehicle':
+        return describeVehicle(body)
+      case 'history': {
+        const points = body.points ?? []
+        const peak = points.reduce((max, p) => Math.max(max, p.peakPassengerCount), 0)
+        return `${points.length} puntos cada ${body.interval} · máximo ${peak} pasajeros`
+      }
+      case 'events': {
+        const events = body.events ?? []
+        const boardings = events.reduce((sum, e) => sum + e.boardings, 0)
+        const alightings = events.reduce((sum, e) => sum + e.alightings, 0)
+        return `${events.length} eventos de puerta · ${boardings} suben · ${alightings} bajan`
+      }
+    }
+    return ''
+  }
+
+  // ---- The log ----
+
+  function time(date) {
+    return date.toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+  }
+
+  function formatBytes(bytes) {
+    return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`
+  }
+
+  function trim() {
+    while (log.children.length > maxEntries) log.lastElementChild.remove()
+  }
+
+  function addDivider(text) {
+    const item = document.createElement('li')
+    item.className = 'divider'
+    item.textContent = `— ${text} · ${time(new Date())} —`
+    log.prepend(item)
+    trim()
+  }
+
+  function addEntry({ at, url, code, codeText, ms, bytes, kind, body, error }) {
+    empty.hidden = true
+    const item = document.createElement('li')
+    const details = document.createElement('details')
+    details.className = 'entry'
+    const summary = document.createElement('summary')
+
+    const cells = [
+      ['time', time(at)],
+      ['method', 'GET'],
+      ['url', url],
+    ]
+    for (const [className, text] of cells) {
+      const span = document.createElement('span')
+      span.className = className
+      span.textContent = text
+      summary.append(span)
+    }
+
+    const meta = document.createElement('span')
+    meta.className = 'meta'
+    const codeSpan = document.createElement('span')
+    codeSpan.className = `code ${error || code >= 500 ? 'error' : code >= 400 ? 'client' : 'ok'}`
+    codeSpan.textContent = error ? 'sin respuesta' : `${code} ${codeText}`
+    meta.append(codeSpan, ` · ${ms} ms${bytes != null ? ' · ' + formatBytes(bytes) : ''}`)
+    summary.append(meta)
+
+    const text = document.createElement('span')
+    text.className = 'summary-text'
+    text.textContent = error ?? summarize(kind, body)
+    summary.append(text)
+
+    details.append(summary)
+    // The JSON is only formatted when an entry is opened; most entries never are.
+    if (body != null) {
+      details.addEventListener('toggle', () => {
+        if (details.open && !details.querySelector('pre')) {
+          const pre = document.createElement('pre')
+          pre.textContent = JSON.stringify(body, null, 2)
+          details.append(pre)
+        }
+      })
+    }
+
+    item.append(details)
+    log.prepend(item)
+    trim()
+  }
+
+  // ---- Polling ----
+
+  async function call(path, kind) {
+    const at = new Date()
+    const started = performance.now()
+    calls++
+    try {
+      const response = await fetch(path, { headers: { Accept: 'application/json' } })
+      const raw = await response.text()
+      const ms = Math.round(performance.now() - started)
+      let body = null
+      try { body = raw ? JSON.parse(raw) : null } catch { body = { raw } }
+      addEntry({ at, url: path, code: response.status, codeText: response.statusText, ms, bytes: new Blob([raw]).size, kind, body })
+      return response.ok ? body : null
+    } catch (error) {
+      addEntry({ at, url: path, ms: Math.round(performance.now() - started), error: `Error de red: ${error.message}` })
+      return null
+    } finally {
+      updateStatus()
+    }
+  }
+
+  function updatePlates(vehicles) {
+    let added = false
+    for (const v of vehicles) {
+      if (!knownPlates.has(v.vehicleId)) {
+        knownPlates.add(v.vehicleId)
+        added = true
+      }
+    }
+    if (!added) return
+    const selected = busSelect.value
+    const plates = [...knownPlates].sort((a, b) => a.localeCompare(b, 'es', { numeric: true }))
+    busSelect.replaceChildren(new Option('Todos los buses', ''), ...plates.map((plate) => new Option(plate, plate)))
+    busSelect.value = selected
+  }
+
+  function plate() {
+    return busSelect.value
+  }
+
+  async function fastPoll(myGeneration) {
+    const bus = plate()
+    if (bus) {
+      await call(`/api/v1/vehicles/${encodeURIComponent(bus)}`, 'vehicle')
+    } else {
+      const body = await call('/api/v1/vehicles', 'list')
+      if (body?.vehicles) updatePlates(body.vehicles)
+    }
+    if (running && myGeneration === generation) {
+      fastTimer = setTimeout(() => fastPoll(myGeneration), Number(intervalSelect.value) || fastPollDefault)
+    }
+  }
+
+  async function detailPoll(myGeneration) {
+    const bus = plate()
+    if (!bus) return
+    const id = encodeURIComponent(bus)
+    const since = new Date(Date.now() - hourMs).toISOString()
+    await call(`/api/v1/vehicles/${id}/history?interval=5m`, 'history')
+    await call(`/api/v1/vehicles/${id}/events?since=${encodeURIComponent(since)}`, 'events')
+    if (running && myGeneration === generation) {
+      detailTimer = setTimeout(() => detailPoll(myGeneration), detailPollMs)
+    }
+  }
+
+  function start() {
+    stop()
+    running = true
+    const myGeneration = ++generation
+    fastPoll(myGeneration)
+    if (plate()) detailPoll(myGeneration)
+    toggleButton.textContent = 'Pausar'
+    toggleButton.classList.add('primary')
+    updateStatus()
+  }
+
+  function stop() {
+    generation++
+    clearTimeout(fastTimer)
+    clearTimeout(detailTimer)
+  }
+
+  function updateStatus() {
+    const state = running ? '<span class="live">● consultando</span>' : '<span class="paused">❚❚ en pausa</span>'
+    status.innerHTML = `${state} · ${calls} llamadas · ${log.querySelectorAll('.entry').length} en pantalla`
+  }
+
+  // The chosen bus lives in the address (?bus=SJB-15456), so a view can be shared or reloaded.
+  function syncAddress() {
+    const url = new URL(location.href)
+    if (plate()) url.searchParams.set('bus', plate())
+    else url.searchParams.delete('bus')
+    history.replaceState(null, '', url)
+  }
+
+  busSelect.addEventListener('change', () => {
+    syncAddress()
+    addDivider(plate() ? `Bus ${plate()}` : 'Todos los buses')
+    if (running) start()
+  })
+  intervalSelect.addEventListener('change', () => running && start())
+  toggleButton.addEventListener('click', () => {
+    if (running) {
+      running = false
+      stop()
+      toggleButton.textContent = 'Reanudar'
+      toggleButton.classList.remove('primary')
+      addDivider('En pausa')
+      updateStatus()
+    } else {
+      start()
+    }
+  })
+  document.getElementById('clear').addEventListener('click', () => {
+    log.replaceChildren()
+    empty.hidden = false
+    empty.textContent = 'Registro vacío. Las próximas respuestas aparecerán aquí.'
+    updateStatus()
+  })
+
+  const requested = new URL(location.href).searchParams.get('bus')
+  if (requested) {
+    const bus = requested.toUpperCase()
+    knownPlates.add(bus)
+    busSelect.append(new Option(bus, bus))
+    busSelect.value = bus
+    // Opening on one bus never polls the fleet list, so the picker is filled once here.
+    fetch('/api/v1/vehicles').then((r) => r.json()).then((body) => updatePlates(body.vehicles ?? [])).catch(() => {})
+  }
+  start()
+</script>
+</body>
+</html>
