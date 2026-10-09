@@ -1,7 +1,9 @@
 "use client";
 
-import { UsersIcon } from "lucide-react";
+import { useEffect, useState } from "react";
+import { UsersIcon, VideoIcon, RadioIcon } from "lucide-react";
 
+import { RecordedDetections } from "@/components/recorded-detections";
 import { StatusPill } from "@/components/status-pill";
 import { WhepPlayer } from "@/components/whep-player";
 import { type Camera, whepUrl } from "@/lib/api";
@@ -9,24 +11,97 @@ import { objectLabel, percent } from "@/lib/format";
 import { occupancy } from "@/lib/occupancy";
 import { type DetectionFrame, peopleIn, useCameraDetections } from "@/lib/realtime";
 
-/** Video en vivo de la cámara con las detecciones del servicio de visión superpuestas. */
+const VIDEO_SOURCE_KEY = "camera-platform.videoSource";
+
+type VideoSource = "live" | "demo";
+
+/** Video en vivo de la cámara con las detecciones del servicio de visión superpuestas, con selector de fuente. */
 export function CameraLive({ camera }: { camera: Camera }) {
-  const frame = useCameraDetections(camera.id);
-  return (
-    <WhepPlayer
-      url={whepUrl(camera.streamKey)}
-      overlay={
-        <>
-          {frame && <DetectionOverlay frame={frame} />}
-          <PeopleCounter people={frame ? peopleIn(frame) : null} capacity={camera.capacity} />
-        </>
+  const [source, setSource] = useState<VideoSource>("live");
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(VIDEO_SOURCE_KEY) as VideoSource | null;
+      if (saved === "live" || saved === "demo") {
+        setSource(saved);
       }
-    />
+    } catch {
+      // Ignorar fallback
+    }
+  }, []);
+
+  const handleSourceChange = (newSource: VideoSource) => {
+    setSource(newSource);
+    try {
+      window.localStorage.setItem(VIDEO_SOURCE_KEY, newSource);
+    } catch {
+      // Ignorar fallback
+    }
+  };
+
+  const frame = useCameraDetections(camera.id);
+
+  return (
+    <div className="flex flex-col gap-2">
+      {/* Selector de fuente de video global/local */}
+      <div className="flex items-center justify-between pb-1">
+        <span className="text-[12px] font-medium text-black/50">Fuente de video:</span>
+        <div className="flex rounded-lg border border-black/10 bg-black/[0.02] p-0.5">
+          <button
+            type="button"
+            onClick={() => handleSourceChange("live")}
+            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+              source === "live"
+                ? "bg-white text-black shadow-xs font-semibold"
+                : "text-black/50 hover:text-black"
+            }`}
+          >
+            <RadioIcon className={`size-3 ${source === "live" ? "text-emerald-600" : ""}`} />
+            En vivo (WHEP)
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSourceChange("demo")}
+            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+              source === "demo"
+                ? "bg-white text-black shadow-xs font-semibold"
+                : "text-black/50 hover:text-black"
+            }`}
+          >
+            <VideoIcon className={`size-3 ${source === "demo" ? "text-[#1d7fe0]" : ""}`} />
+            Demo grabado (RF-DETR)
+          </button>
+        </div>
+      </div>
+
+      {source === "demo" ? (
+        <RecordedDetections capacity={camera.capacity} />
+      ) : (
+        <WhepPlayer
+          url={whepUrl(camera.streamKey)}
+          overlay={
+            <>
+              {frame && <DetectionOverlay frame={frame} />}
+              <PeopleCounter
+                people={frame ? peopleIn(frame) : null}
+                capacity={camera.capacity}
+              />
+            </>
+          }
+        />
+      )}
+    </div>
   );
 }
 
 /** Personas en el último frame analizado; sin análisis reciente no hay un número confiable. */
-function PeopleCounter({ people, capacity }: { people: number | null; capacity: number | null }) {
+function PeopleCounter({
+  people,
+  capacity,
+}: {
+  people: number | null;
+  capacity: number | null;
+}) {
   const level = people !== null && capacity ? occupancy(people, capacity) : null;
 
   return (
@@ -47,8 +122,14 @@ function PeopleCounter({ people, capacity }: { people: number | null; capacity: 
       ) : (
         <span className="flex flex-col items-start">
           <span className="flex items-baseline gap-1.5">
-            <span className="text-2xl leading-none font-bold text-black tabular-nums sm:text-3xl md:text-5xl">{people}</span>
-            {capacity && <span className="text-[13px] font-semibold text-black/45">/ {capacity}</span>}
+            <span className="text-2xl leading-none font-bold text-black tabular-nums sm:text-3xl md:text-5xl">
+              {people}
+            </span>
+            {capacity && (
+              <span className="text-[13px] font-semibold text-black/45">
+                / {capacity}
+              </span>
+            )}
           </span>
           <span className="mt-1 hidden text-[13px] font-semibold text-black/55 sm:block">
             {people === 1 ? "persona en cámara" : "personas en cámara"}
@@ -70,7 +151,6 @@ function DetectionOverlay({ frame }: { frame: DetectionFrame }) {
   const fontSize = Math.max(14, width / 60);
 
   return (
-    // Mismo encuadre que el <video> (object-contain ↔ xMidYMid meet): las cajas coinciden con la imagen.
     <svg
       className="pointer-events-none absolute inset-0 h-full w-full"
       viewBox={`0 0 ${width} ${height}`}
