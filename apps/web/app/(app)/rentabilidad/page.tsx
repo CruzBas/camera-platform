@@ -1,9 +1,13 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { AssumptionsDialog } from "@/components/assumptions-dialog";
+import { Gauge } from "@/components/gauge";
+import { Heatmap } from "@/components/heatmap";
+import { HourlyChart } from "@/components/hourly-chart";
+import { LoadStack } from "@/components/load-stack";
 import { RouteSelector } from "@/components/route-selector";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   formatColonesShort,
   formatOne,
@@ -42,17 +46,28 @@ export default function RentabilidadPage() {
   const fetchHourly = useCallback((signal: AbortSignal) => getFleetHourly(null, signal), []);
   const { data: fleetHourly, error } = usePolling(fetchHourly, 10000);
 
-  const allRows = usageRows(fleetHourly);
-  const routeRows = selectedRouteId
-    ? allRows.filter((r) => r.routeId === selectedRouteId)
-    : allRows;
-  const scopedRows = rowsInPeriod(routeRows, selectedPeriod);
+  const allRows = useMemo(() => usageRows(fleetHourly), [fleetHourly]);
+  const routeRows = useMemo(
+    () => (selectedRouteId ? allRows.filter((r) => r.routeId === selectedRouteId) : allRows),
+    [allRows, selectedRouteId]
+  );
+  const scopedRows = useMemo(
+    () => rowsInPeriod(routeRows, selectedPeriod),
+    [routeRows, selectedPeriod]
+  );
+
   const t = totals(scopedRows, assumptions);
   const measured = t.measuredHours > 0;
 
+  const routeIds = useMemo(() => ROUTE_OPTIONS.map((r) => r.id), []);
+  const routeNames = useMemo(
+    () => new Map(ROUTE_OPTIONS.map((r) => [r.id, r.name])),
+    []
+  );
+
   return (
     <>
-      <header className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+      <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-black">Rentabilidad operativa</h1>
           <p className="text-[15px] text-black/50">
@@ -67,7 +82,7 @@ export default function RentabilidadPage() {
         />
       </header>
 
-      {/* Selector de rutas y franjas */}
+      {/* Selector secundario de rutas y franjas dentro de la página */}
       <div className="flex flex-col gap-3 rounded-2xl border border-black/10 bg-white p-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <span className="text-[13px] font-semibold text-black/60">
@@ -137,22 +152,102 @@ export default function RentabilidadPage() {
         />
       </section>
 
-      {/* Contenedor temporal de gráficos (commit 7 los integrará) */}
-      <Card>
-        <CardContent className="flex min-h-[220px] flex-col items-center justify-center p-8 text-center text-sm text-black/45">
-          <p className="font-semibold text-black">
-            {selectedRouteId
-              ? ROUTE_OPTIONS.find((r) => r.id === selectedRouteId)?.name
-              : "Toda la flota"}{" "}
-            · Abordajes por hora-bus:{" "}
-            <span className="font-bold text-black">{measured ? formatOne(t.ridersPerBusHour) : "—"}</span>{" "}
-            (Punto de equilibrio: {formatOne(t.breakEven)})
-          </p>
-          <span className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800">
-            Nota: Datos simulados para evaluación de costos operativos.
-          </span>
-        </CardContent>
-      </Card>
+      {/* Panel de Gráficos de Rentabilidad */}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.8fr)]">
+        {/* Dial de equilibrio */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base font-bold">
+              Abordajes por hora-bus
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col items-center justify-center pt-0">
+            <Gauge
+              value={t.ridersPerBusHour}
+              breakEven={t.breakEven}
+              measured={measured}
+            />
+            <p className="mt-2 text-center text-[12px] text-black/50">
+              {measured
+                ? t.ridersPerBusHour >= t.breakEven
+                  ? "La operación cubre sus costos en esta selección."
+                  : "Por debajo del volumen necesario para cubrir costos."
+                : "Esperando registros de la flota."}
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Gráfico horario contra equilibrio */}
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+              <CardTitle className="text-base font-bold">
+                ¿Qué horas pagan su costo?
+              </CardTitle>
+              <span className="text-[12px] text-black/45">
+                Verde: cubre costo · Rojo: bajo equilibrio
+              </span>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <HourlyChart
+              rows={routeRows}
+              assumptions={assumptions}
+              period={selectedPeriod}
+            />
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Matriz Ruta × Hora */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base font-bold">
+              Ruta × hora de operación
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <Heatmap
+              rows={allRows}
+              routeIds={routeIds}
+              routeNames={routeNames}
+              assumptions={assumptions}
+              selectedRoute={selectedRouteId}
+              period={selectedPeriod}
+              onSelectRoute={(id) =>
+                setSelectedRouteId((prev) => (prev === id ? null : id))
+              }
+            />
+          </CardContent>
+        </Card>
+
+        {/* Tiempo por nivel de ocupación */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base font-bold">
+              Tiempo por nivel de ocupación
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <LoadStack
+              rows={rowsInPeriod(allRows, selectedPeriod)}
+              routeIds={routeIds}
+              routeNames={routeNames}
+              selectedRoute={selectedRouteId}
+              onSelectRoute={(id) =>
+                setSelectedRouteId((prev) => (prev === id ? null : id))
+              }
+            />
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="flex justify-center py-1">
+        <span className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800">
+          Nota: Datos simulados para evaluación de rentabilidad y frecuencias operativas.
+        </span>
+      </div>
     </>
   );
 }
