@@ -1,6 +1,6 @@
 "use client";
 
-import { BellIcon, CameraIcon, HomeIcon, LogOutIcon } from "lucide-react";
+import { BellIcon, CameraIcon, HomeIcon, LogOutIcon, TrendingUpIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Suspense } from "react";
@@ -14,6 +14,7 @@ const NAV = [
   { href: "/", label: "Inicio", icon: HomeIcon },
   { href: "/cameras", label: "Unidades", icon: CameraIcon },
   { href: "/events", label: "Eventos", icon: BellIcon },
+  { href: "/rentabilidad", label: "Rentabilidad", icon: TrendingUpIcon },
 ];
 
 /** Área autenticada: si no hay sesión, `api()` redirige al login. */
