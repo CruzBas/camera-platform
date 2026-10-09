@@ -5,6 +5,7 @@ from .camera_worker import CameraWorker
 from .config import Settings
 from .detector import PersonDetector
 from .platform_client import PlatformClient
+from .rfdetr_detector import RfDetrDetector
 
 log = logging.getLogger("vision.supervisor")
 
@@ -17,7 +18,12 @@ class Supervisor:
     def __init__(self, settings: Settings):
         self._settings = settings
         self._client = PlatformClient(settings.platform_api_url, settings.api_key)
-        self._detector = PersonDetector(settings.model, settings.confidence)
+        if settings.detector == "rfdetr":
+            log.info("Iniciando detector RF-DETR ONNX desde %s", settings.rfdetr_model_path)
+            self._detector = RfDetrDetector(settings.rfdetr_model_path, settings.confidence)
+        else:
+            log.info("Iniciando detector YOLO desde %s", settings.model)
+            self._detector = PersonDetector(settings.model, settings.confidence)
         self._workers: dict[str, CameraWorker] = {}
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="supervisor", daemon=True)

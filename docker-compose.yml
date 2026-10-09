@@ -67,11 +67,15 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    volumes:
+      - ./models:/app/models/custom:ro
     environment:
       PLATFORM_API_URL: http://api:8080
       VISION_API_KEY: ${VISION_API_KEY}
       STREAM_BASE_URL: rtsp://streaming:8554
       ANALYSIS_FPS: ${ANALYSIS_FPS:-2}
+      DETECTOR: ${DETECTOR:-yolo}
+      RFDETR_MODEL_PATH: ${RFDETR_MODEL_PATH:-/app/models/custom/bus-passengers-rfdetr-s-v1.onnx}
       # Hilos de PyTorch por inferencia. Más hilos compiten con la decodificación del video y
       # empeoran la latencia (medido en Docker sobre Mac: 8 hilos ≈ 560 ms, 2 hilos ≈ 200 ms).
       OMP_NUM_THREADS: ${INFERENCE_THREADS:-2}
