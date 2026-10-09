@@ -18,8 +18,8 @@ export function LoadStack({
   const byRoute = groupBy(rows, (row) => row.routeId ?? "—");
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1">
         {routeIds.map((routeId) => {
           const shares = loadShares(byRoute.get(routeId) ?? []);
           const isSelected = selectedRoute === routeId;
@@ -31,7 +31,7 @@ export function LoadStack({
               key={routeId}
               type="button"
               onClick={() => onSelectRoute(routeId)}
-              className={`flex items-center gap-3 rounded-lg p-1.5 text-left transition-colors ${
+              className={`flex items-center gap-2 rounded px-1.5 py-0.5 text-left transition-colors ${
                 isSelected
                   ? "bg-[#1d7fe0]/10"
                   : faded
@@ -40,7 +40,7 @@ export function LoadStack({
               }`}
             >
               <span
-                className={`w-32 shrink-0 truncate text-[12px] font-medium ${
+                className={`w-28 shrink-0 truncate text-[11px] font-medium ${
                   isSelected ? "font-bold text-[#1d7fe0]" : "text-black/80"
                 }`}
                 title={name}
@@ -48,7 +48,7 @@ export function LoadStack({
                 {name}
               </span>
 
-              <div className="flex h-5 flex-1 overflow-hidden rounded-md bg-black/5">
+              <div className="flex h-3.5 flex-1 overflow-hidden rounded bg-black/5">
                 {shares.map((share, index) => {
                   if (share <= 0) return null;
                   const group = loadGroups[index];
@@ -70,11 +70,11 @@ export function LoadStack({
         })}
       </div>
 
-      <ul className="flex flex-wrap items-center gap-4 text-[11px] text-black/60 pt-1">
+      <ul className="flex flex-wrap items-center gap-3 text-[10px] text-black/55 pt-0.5">
         {loadGroups.map((group) => (
-          <li key={group.label} className="flex items-center gap-1.5">
+          <li key={group.label} className="flex items-center gap-1">
             <span
-              className="size-3 rounded-xs"
+              className="size-2 rounded-xs"
               style={{ backgroundColor: group.color }}
             />
             <span>

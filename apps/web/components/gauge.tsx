@@ -30,9 +30,9 @@ export function Gauge({
   const covers = value >= breakEven;
 
   return (
-    <div className="flex flex-col items-center justify-center p-2">
+    <div className="flex flex-col items-center justify-center p-0">
       <svg
-        className="w-full max-w-[240px] overflow-visible"
+        className="w-full max-w-[180px] overflow-visible"
         viewBox="0 0 200 146"
         role="img"
         aria-label={`Abordajes por hora-bus: ${formatOne(value)}; equilibrio ${formatOne(breakEven)}`}

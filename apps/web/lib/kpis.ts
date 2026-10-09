@@ -199,3 +199,12 @@ export function formatColonesShort(value: number): string {
     return `₡${whole.format(value / 1_000)} k`;
   return formatColones(value);
 }
+
+/** Determina si un bus está activamente en servicio (en ruta con viaje asignado o con pasajeros reales). */
+export function inService(vehicle: VehicleState): boolean {
+  return (
+    !vehicle.stale &&
+    (vehicle.trip !== null ||
+      (vehicle.occupancy !== null && vehicle.occupancy.source !== "SIMULATED"))
+  );
+}

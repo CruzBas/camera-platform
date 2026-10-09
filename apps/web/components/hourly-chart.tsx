@@ -10,8 +10,8 @@ import {
 } from "@/lib/kpis";
 
 const width = 480;
-const height = 180;
-const pad = { top: 18, right: 12, bottom: 24, left: 32 };
+const height = 135;
+const pad = { top: 12, right: 10, bottom: 20, left: 28 };
 
 interface HourlyChartProps {
   rows: UsageRow[];

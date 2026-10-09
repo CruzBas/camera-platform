@@ -53,19 +53,19 @@ export function Heatmap({
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="overflow-x-auto pb-2">
+    <div className="flex flex-col gap-1.5">
+      <div className="overflow-x-auto pb-0.5">
         <div
-          className="grid gap-1 min-w-[500px]"
+          className="grid gap-0.5 min-w-[460px]"
           style={{
-            gridTemplateColumns: `minmax(110px, auto) repeat(${hours.length}, minmax(18px, 1fr))`,
+            gridTemplateColumns: `minmax(95px, auto) repeat(${hours.length}, minmax(16px, 1fr))`,
           }}
         >
           <span />
           {hours.map((hour) => (
             <span
               key={hour}
-              className={`text-center text-[10px] font-medium ${
+              className={`text-center text-[9.5px] font-medium ${
                 inPeriod(hour, period) ? "text-black/70" : "text-black/20"
               }`}
             >
@@ -87,7 +87,7 @@ export function Heatmap({
                 <button
                   type="button"
                   onClick={() => onSelectRoute(routeId)}
-                  className={`truncate rounded px-1.5 py-1 text-left text-[11px] font-medium transition-colors ${
+                  className={`truncate rounded px-1 py-0.5 text-left text-[10.5px] font-medium transition-colors ${
                     isSelected
                       ? "bg-[#1d7fe0]/15 font-bold text-[#1d7fe0]"
                       : faded
@@ -110,9 +110,9 @@ export function Heatmap({
                       key={`${routeId}-${hour}`}
                       type="button"
                       onClick={() => onSelectRoute(routeId)}
-                      className={`h-6 rounded-xs transition-opacity ${
+                      className={`h-4 rounded-xs transition-opacity ${
                         faded || !inActivePeriod ? "opacity-30" : "opacity-100"
-                      } hover:ring-2 hover:ring-black/20`}
+                      } hover:ring-1 hover:ring-black/20`}
                       style={{
                         backgroundColor: empty ? "#f3f4f6" : cellColor(ratio),
                       }}
@@ -130,21 +130,21 @@ export function Heatmap({
         </div>
       </div>
 
-      <ul className="flex flex-wrap items-center gap-4 text-[11px] text-black/60">
-        <li className="flex items-center gap-1.5">
-          <span className="size-3 rounded-xs bg-[#ef4444]" />
-          Muy por debajo
+      <ul className="flex flex-wrap items-center gap-3 text-[10px] text-black/55">
+        <li className="flex items-center gap-1">
+          <span className="size-2 rounded-xs bg-[#ef4444]" />
+          Muy bajo
         </li>
-        <li className="flex items-center gap-1.5">
-          <span className="size-3 rounded-xs bg-[#fca5a5]" />
-          Debajo de equilibrio
+        <li className="flex items-center gap-1">
+          <span className="size-2 rounded-xs bg-[#fca5a5]" />
+          Bajo equilibrio
         </li>
-        <li className="flex items-center gap-1.5">
-          <span className="size-3 rounded-xs bg-[#86efac]" />
+        <li className="flex items-center gap-1">
+          <span className="size-2 rounded-xs bg-[#86efac]" />
           Cubre costo
         </li>
-        <li className="flex items-center gap-1.5">
-          <span className="size-3 rounded-xs bg-[#22c55e]" />
+        <li className="flex items-center gap-1">
+          <span className="size-2 rounded-xs bg-[#22c55e]" />
           Holgado
         </li>
       </ul>
