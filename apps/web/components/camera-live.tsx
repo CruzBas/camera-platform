@@ -77,18 +77,31 @@ export function CameraLive({ camera }: { camera: Camera }) {
       {source === "demo" ? (
         <RecordedDetections capacity={camera.capacity} />
       ) : (
-        <WhepPlayer
-          url={whepUrl(camera.streamKey)}
-          overlay={
-            <>
-              {frame && <DetectionOverlay frame={frame} />}
-              <PeopleCounter
-                people={frame ? peopleIn(frame) : null}
-                capacity={camera.capacity}
-              />
-            </>
-          }
-        />
+        <div className="relative">
+          <WhepPlayer
+            url={whepUrl(camera.streamKey)}
+            overlay={
+              <>
+                {frame && <DetectionOverlay frame={frame} />}
+                <PeopleCounter
+                  people={frame ? peopleIn(frame) : null}
+                  capacity={camera.capacity}
+                />
+              </>
+            }
+          />
+          {/* Sugerencia rápida cuando la cámara no está conectada */}
+          <div className="mt-2 flex items-center justify-between rounded-xl border border-black/10 bg-amber-50/60 px-3 py-2 text-xs text-amber-900">
+            <span>¿Sin señal en la cámara en vivo? Puedes presentar la grabación analizada:</span>
+            <button
+              type="button"
+              onClick={() => handleSourceChange("demo")}
+              className="ml-2 font-semibold text-[#1d7fe0] hover:underline whitespace-nowrap"
+            >
+              Cambiar a video demo →
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

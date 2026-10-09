@@ -208,6 +208,22 @@ public class DetectionServiceTests
     }
 
     [Fact]
+    public async Task Passenger_events_accept_sitting_and_standing_labels()
+    {
+        var (db, service, cameraId) = await Setup();
+        using var _ = db;
+
+        await service.IngestAsync(cameraId, Frame(new Detection("sitting", 0.85f, [0, 0, 1, 1])), default);
+        _clock.Advance(TimeSpan.FromSeconds(5));
+        await service.IngestAsync(cameraId, Frame(new Detection("standing", 0.92f, [0, 0, 1, 1])), default);
+
+        var events = await db.DetectionEvents.ToListAsync();
+        var ev = Assert.Single(events);
+        Assert.Equal(0.92f, ev.MaxConfidence);
+        Assert.Equal(1, ev.MaxCount);
+    }
+
+    [Fact]
     public async Task Unknown_camera_and_invalid_frames_are_rejected()
     {
         var (db, service, cameraId) = await Setup();
