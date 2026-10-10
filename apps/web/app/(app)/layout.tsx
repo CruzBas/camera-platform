@@ -17,7 +17,6 @@ const NAV = [
   { href: "/rentabilidad", label: "Rentabilidad", icon: TrendingUpIcon },
 ];
 
-/** Área autenticada: si no hay sesión, `api()` redirige al login. */
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { data: user } = useApi<{ email: string }>("/api/auth/me");
