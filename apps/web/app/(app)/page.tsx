@@ -10,6 +10,7 @@ import { EventsList } from "@/components/events-list";
 import { FleetMap } from "@/components/fleet-map";
 import { StatusPill } from "@/components/status-pill";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { type Camera, type CameraStatusSummary, useApi } from "@/lib/api";
 import { formatClock } from "@/lib/format";
 import { inService } from "@/lib/kpis";
@@ -20,6 +21,7 @@ import { usePolling } from "@/lib/use-polling";
 
 const STATUS_REFRESH_MS = 5000;
 const OCCUPANCY_REFRESH_MS = 3000;
+const DEMO_STREAM_KEY = "mac";
 
 export default function FleetPage() {
   const { data: cameras, error, reload } = useApi<Camera[]>("/api/cameras");
@@ -36,6 +38,13 @@ export default function FleetPage() {
   const vehicles = vehicleList?.vehicles ?? [];
 
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
+  // Cámara elegida a mano en el panel; tiene prioridad sobre la que se deduce del bus.
+  const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
+
+  const selectVehicle = (id: string | null) => {
+    setSelectedVehicleId(id);
+    setSelectedCameraId(null);
+  };
 
   if (error) {
     return (
@@ -63,8 +72,14 @@ export default function FleetPage() {
     );
   }
 
-  // Camera del sistema (Decision 2: panel de cámara siempre visible con la primera cámara)
-  const primaryCamera = cameras[0];
+  const selectedVehicle = vehicles.find((v) => v.vehicleId === selectedVehicleId);
+
+
+  const demoCamera = cameras.find((c) => c.streamKey === DEMO_STREAM_KEY) ?? cameras[0];
+  const primaryCamera =
+    cameras.find((c) => c.id === selectedCameraId) ??
+    (selectedVehicle && cameras.find((c) => c.name === selectedVehicle.vehicleId)) ??
+    demoCamera;
   const primaryStatus = statuses?.find((s) => s.cameraId === primaryCamera.id);
   const primaryFrame = frames[primaryCamera.id];
   const primaryPeople = primaryFrame ? peopleIn(primaryFrame) : null;
@@ -84,7 +99,6 @@ export default function FleetPage() {
     const p = v.occupancy?.percent ?? 0;
     return p >= 70;
   });
-  const selectedVehicle = vehicles.find((v) => v.vehicleId === selectedVehicleId);
 
   return (
     <div className="flex flex-col gap-2.5 -my-2 md:-my-5 max-w-full">
@@ -128,7 +142,7 @@ export default function FleetPage() {
             {selectedVehicleId && (
               <button
                 type="button"
-                onClick={() => setSelectedVehicleId(null)}
+                onClick={() => selectVehicle(null)}
                 className="text-[11px] font-medium text-[#1d7fe0] hover:underline"
               >
                 Limpiar selección ({selectedVehicleId})
@@ -138,7 +152,7 @@ export default function FleetPage() {
           <FleetMap
             vehicles={vehicles}
             selectedId={selectedVehicleId}
-            onSelect={(id) => setSelectedVehicleId(id)}
+            onSelect={selectVehicle}
             className="flex-1"
           />
 
@@ -174,20 +188,39 @@ export default function FleetPage() {
 
         {/* Panel de cámara siempre visible */}
         <section
-          aria-label={`Cámara de ${primaryCamera.name}`}
+          aria-label={`Cámara de ${selectedVehicle?.vehicleId ?? primaryCamera.name}`}
           className="flex flex-col gap-2.5 rounded-2xl border border-black/10 bg-white p-3"
         >
           <header className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
-                <h2 className="text-base font-bold text-black">{primaryCamera.name}</h2>
+                <h2 className="text-base font-bold text-black">
+                  {selectedVehicle?.vehicleId ?? primaryCamera.name}
+                </h2>
                 <TransmissionPill status={primaryStatus} />
               </div>
               <p className="text-[12px] text-black/45">
-                {primaryCamera.route ?? "Sin ruta asignada"}
+                {selectedVehicle
+                  ? `${
+                      selectedVehicle.trip
+                        ? `Ruta ${selectedVehicle.trip.routeId} · hacia ${
+                            selectedVehicle.trip.direction === "INBOUND" ? "San José" : "Coronado"
+                          }`
+                        : "En terminal"
+                    } · Cámara ${primaryCamera.name}`
+                  : (primaryCamera.route ?? "Selecciona un bus en el mapa")}
               </p>
             </div>
-            {primaryPeople !== null && (
+            {selectedVehicle?.occupancy ? (
+              <span className="flex items-baseline gap-1 whitespace-nowrap">
+                <span className="text-xl font-bold leading-none tabular-nums text-black">
+                  {selectedVehicle.occupancy.passengerCount}
+                </span>
+                <span className="text-[12px] font-semibold text-black/45">
+                  / {selectedVehicle.occupancy.capacity} pasajeros
+                </span>
+              </span>
+            ) : primaryPeople !== null && (
               <span className="flex items-baseline gap-1 whitespace-nowrap">
                 <span className="text-xl font-bold leading-none tabular-nums text-black">
                   {primaryPeople}
@@ -199,6 +232,26 @@ export default function FleetPage() {
               </span>
             )}
           </header>
+
+          {cameras.length > 1 && (
+            <Select
+              items={cameras.map((c) => ({ value: c.id, label: c.name }))}
+              value={primaryCamera.id}
+              onValueChange={(id) => id && setSelectedCameraId(id)}
+            >
+              <SelectTrigger size="sm" className="w-full" aria-label="Cambiar de cámara">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {cameras.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                    {c.route && <span className="text-black/45">· {c.route}</span>}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
 
           <CameraLive camera={primaryCamera} />
 
@@ -225,9 +278,11 @@ export default function FleetPage() {
               <Detail
                 label="Capacidad"
                 value={
-                  primaryCamera.capacity
-                    ? `${primaryCamera.capacity} pax`
-                    : "Sin definir"
+                  selectedVehicle?.occupancy
+                    ? `${selectedVehicle.occupancy.capacity} pax`
+                    : primaryCamera.capacity
+                      ? `${primaryCamera.capacity} pax`
+                      : "Sin definir"
                 }
               />
               <Detail
