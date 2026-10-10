@@ -1,36 +1,59 @@
 "use client";
 
-import { BusFrontIcon, ChevronRightIcon, VideoIcon, XIcon } from "lucide-react";
+import { ChevronRightIcon } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { CameraFormDialog } from "@/components/camera-form-dialog";
 import { CameraLive } from "@/components/camera-live";
 import { EventsList } from "@/components/events-list";
+import { FleetMap } from "@/components/fleet-map";
 import { StatusPill } from "@/components/status-pill";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { type Camera, type CameraStatusSummary, useApi } from "@/lib/api";
 import { formatClock } from "@/lib/format";
+import { inService } from "@/lib/kpis";
 import { occupancy } from "@/lib/occupancy";
+import { getVehicles } from "@/lib/occupancy-api";
 import { peopleIn, useLiveDetections } from "@/lib/realtime";
+import { usePolling } from "@/lib/use-polling";
 
 const STATUS_REFRESH_MS = 5000;
-
-type Bus = {
-  camera: Camera;
-  status: CameraStatusSummary | undefined;
-  people: number | null;
-};
+const OCCUPANCY_REFRESH_MS = 3000;
+const DEMO_STREAM_KEY = "mac";
 
 export default function FleetPage() {
   const { data: cameras, error, reload } = useApi<Camera[]>("/api/cameras");
-  const { data: statuses } = useApi<CameraStatusSummary[]>("/api/cameras/status", STATUS_REFRESH_MS);
+  const { data: statuses } = useApi<CameraStatusSummary[]>(
+    "/api/cameras/status",
+    STATUS_REFRESH_MS
+  );
   const ids = useMemo(() => (cameras ?? []).map((c) => c.id), [cameras]);
   const frames = useLiveDetections(ids);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  if (error) return <p className="text-red-700">No se pudieron cargar los buses: {error.message}</p>;
-  if (!cameras) return <h1 className="text-2xl font-bold">Flota en vivo</h1>;
+  // Polling del simulador de flota (Occupancy API)
+  const fetchVehicles = useCallback((signal: AbortSignal) => getVehicles(signal), []);
+  const { data: vehicleList } = usePolling(fetchVehicles, OCCUPANCY_REFRESH_MS);
+  const vehicles = vehicleList?.vehicles ?? [];
+
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
+  // Cámara elegida a mano en el panel; tiene prioridad sobre la que se deduce del bus.
+  const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
+
+  const selectVehicle = (id: string | null) => {
+    setSelectedVehicleId(id);
+    setSelectedCameraId(null);
+  };
+
+  if (error) {
+    return (
+      <p className="text-red-700">No se pudieron cargar los buses: {error.message}</p>
+    );
+  }
+  if (!cameras) {
+    return <h1 className="text-2xl font-bold">Flota en vivo</h1>;
+  }
 
   if (cameras.length === 0) {
     return (
@@ -49,62 +72,247 @@ export default function FleetPage() {
     );
   }
 
-  const buses: Bus[] = cameras.map((camera) => {
-    const frame = frames[camera.id];
-    return {
-      camera,
-      status: statuses?.find((s) => s.cameraId === camera.id),
-      people: frame ? peopleIn(frame) : null,
-    };
-  });
-  const transmitting = buses.filter((b) => b.status?.stream.online);
-  const passengers = buses.reduce((sum, b) => sum + (b.people ?? 0), 0);
-  const crowded = buses.filter(
-    (b) => b.people !== null && b.camera.capacity && occupancy(b.people, b.camera.capacity).percent >= 70,
+  const selectedVehicle = vehicles.find((v) => v.vehicleId === selectedVehicleId);
+
+
+  const demoCamera = cameras.find((c) => c.streamKey === DEMO_STREAM_KEY) ?? cameras[0];
+  const primaryCamera =
+    cameras.find((c) => c.id === selectedCameraId) ??
+    (selectedVehicle && cameras.find((c) => c.name === selectedVehicle.vehicleId)) ??
+    demoCamera;
+  const primaryStatus = statuses?.find((s) => s.cameraId === primaryCamera.id);
+  const primaryFrame = frames[primaryCamera.id];
+  const primaryPeople = primaryFrame ? peopleIn(primaryFrame) : null;
+  const primaryOccupancy =
+    primaryPeople !== null && primaryCamera.capacity
+      ? occupancy(primaryPeople, primaryCamera.capacity)
+      : null;
+
+  // Métricas reales del simulador de flota según horario operativo
+  const runningBuses = vehicles.filter(inService);
+  const parkedBuses = vehicles.filter((v) => !v.stale && !inService(v));
+  const totalFleetPassengers = runningBuses.reduce(
+    (sum, v) => sum + (v.occupancy?.passengerCount ?? 0),
+    0
   );
-  const selected = buses.find((b) => b.camera.id === selectedId);
+  const highOccupancyBuses = runningBuses.filter((v) => {
+    const p = v.occupancy?.percent ?? 0;
+    return p >= 70;
+  });
 
   return (
-    <>
-      <header>
-        <h1 className="text-2xl font-bold">Flota en vivo</h1>
-        <p className="mt-1 text-[15px] text-black/45">Toca un bus para abrir su cámara.</p>
+    <div className="flex flex-col gap-2.5 -my-2 md:-my-5 max-w-full">
+      <header className="flex items-center justify-between gap-2">
+        <div>
+          <h1 className="text-lg font-bold text-black">Flota en vivo</h1>
+          <p className="text-xs text-black/45">
+            Monitoreo de la red de Coronado con telemetría en tiempo real y cámara en cabina.
+          </p>
+        </div>
       </header>
 
-      <section className="grid gap-3 sm:grid-cols-3" aria-label="Resumen de la flota">
-        <Kpi label="Buses transmitiendo" value={`${transmitting.length} de ${buses.length}`} />
-        <Kpi label="Pasajeros a bordo" value={passengers} />
-        <Kpi label="Con ocupación alta" value={crowded.length} alert={crowded.length > 0} />
+      <section className="grid grid-cols-3 gap-2" aria-label="Resumen de la flota">
+        <Kpi
+          label="Unidades en servicio"
+          value={`${runningBuses.length} de ${vehicles.length}`}
+          hint={
+            runningBuses.length < vehicles.length
+              ? `${parkedBuses.length} en terminal`
+              : undefined
+          }
+        />
+        <Kpi label="Pasajeros a bordo" value={totalFleetPassengers} />
+        <Kpi
+          label="Con ocupación alta"
+          value={highOccupancyBuses.length}
+          alert={highOccupancyBuses.length > 0}
+        />
       </section>
 
-      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
-        <section className="rounded-2xl border border-black/10 bg-white px-4 py-1" aria-label="Buses">
-          <ul>
-            {buses.map((bus) => (
-              <li key={bus.camera.id} className="border-b border-black/5 last:border-0">
-                <BusRow
-                  bus={bus}
-                  selected={bus.camera.id === selectedId}
-                  onToggle={() => setSelectedId((id) => (id === bus.camera.id ? null : bus.camera.id))}
-                />
-              </li>
-            ))}
-          </ul>
+      {/* Reemplazo de la lista de buses con el mapa de flota + panel de cámara siempre visible */}
+      <div className="grid grid-cols-[minmax(0,1fr)] items-stretch gap-3 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+        <section
+          className="flex h-full min-h-[460px] flex-col rounded-2xl border border-black/10 bg-white p-2"
+          aria-label="Mapa de flota"
+        >
+          <div className="mb-1.5 flex items-center justify-between px-2 pt-0.5">
+            <span className="text-[12px] font-semibold text-black/60">
+              Red de Coronado · {runningBuses.length} en servicio · {parkedBuses.length} en terminal
+            </span>
+            {selectedVehicleId && (
+              <button
+                type="button"
+                onClick={() => selectVehicle(null)}
+                className="text-[11px] font-medium text-[#1d7fe0] hover:underline"
+              >
+                Limpiar selección ({selectedVehicleId})
+              </button>
+            )}
+          </div>
+          <FleetMap
+            vehicles={vehicles}
+            selectedId={selectedVehicleId}
+            onSelect={selectVehicle}
+            className="flex-1"
+          />
+
+          {/* Tarjeta de seguimiento del bus seleccionado (como en TPOC) */}
+          {selectedVehicle && (
+            <div className="mt-1.5 flex flex-wrap items-center justify-between gap-1.5 rounded-xl bg-slate-50 px-2.5 py-1.5 text-[12px] border border-black/5">
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-black">{selectedVehicle.vehicleId}</span>
+                {selectedVehicle.trip ? (
+                  <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10.5px] font-semibold text-sky-800">
+                    Ruta {selectedVehicle.trip.routeId} · {selectedVehicle.trip.direction === "INBOUND" ? "San José" : "Coronado"}
+                  </span>
+                ) : (
+                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10.5px] font-semibold text-amber-800">
+                    En terminal
+                  </span>
+                )}
+                {selectedVehicle.occupancy && (
+                  <span className="text-black/65">
+                    {selectedVehicle.occupancy.passengerCount} / {selectedVehicle.occupancy.capacity} pax ({selectedVehicle.occupancy.percent}%)
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-black/45 text-[11px]">
+                {selectedVehicle.location?.speedKmh != null && (
+                  <span>Vel: <strong>{Math.round(selectedVehicle.location.speedKmh)} km/h</strong></span>
+                )}
+                <span>Seguimiento activo</span>
+              </div>
+            </div>
+          )}
         </section>
 
-        {selected ? (
-          <BusPanel key={selected.camera.id} bus={selected} onClose={() => setSelectedId(null)} />
-        ) : (
-          <div className="hidden flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-black/10 px-6 py-20 text-center lg:flex">
-            <span className="flex size-14 items-center justify-center rounded-full bg-black/5 text-black/45">
-              <VideoIcon className="size-6" aria-hidden />
-            </span>
-            <p className="text-[15px] font-semibold text-black">Ninguna cámara abierta</p>
-            <p className="max-w-xs text-[13px] text-black/45">
-              Selecciona un bus de la lista para ver su imagen en vivo y el conteo de pasajeros.
-            </p>
-          </div>
-        )}
+        {/* Panel de cámara siempre visible */}
+        <section
+          aria-label={`Cámara de ${selectedVehicle?.vehicleId ?? primaryCamera.name}`}
+          className="flex flex-col gap-2.5 rounded-2xl border border-black/10 bg-white p-3"
+        >
+          <header className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <h2 className="text-base font-bold text-black">
+                  {selectedVehicle?.vehicleId ?? primaryCamera.name}
+                </h2>
+                <TransmissionPill status={primaryStatus} />
+              </div>
+              <p className="text-[12px] text-black/45">
+                {selectedVehicle
+                  ? `${
+                      selectedVehicle.trip
+                        ? `Ruta ${selectedVehicle.trip.routeId} · hacia ${
+                            selectedVehicle.trip.direction === "INBOUND" ? "San José" : "Coronado"
+                          }`
+                        : "En terminal"
+                    } · Cámara ${primaryCamera.name}`
+                  : (primaryCamera.route ?? "Selecciona un bus en el mapa")}
+              </p>
+            </div>
+            {selectedVehicle?.occupancy ? (
+              <span className="flex items-baseline gap-1 whitespace-nowrap">
+                <span className="text-xl font-bold leading-none tabular-nums text-black">
+                  {selectedVehicle.occupancy.passengerCount}
+                </span>
+                <span className="text-[12px] font-semibold text-black/45">
+                  / {selectedVehicle.occupancy.capacity} pasajeros
+                </span>
+              </span>
+            ) : primaryPeople !== null && (
+              <span className="flex items-baseline gap-1 whitespace-nowrap">
+                <span className="text-xl font-bold leading-none tabular-nums text-black">
+                  {primaryPeople}
+                </span>
+                <span className="text-[12px] font-semibold text-black/45">
+                  {primaryCamera.capacity && `/ ${primaryCamera.capacity} `}
+                  {primaryPeople === 1 ? "pasajero" : "pasajeros"}
+                </span>
+              </span>
+            )}
+          </header>
+
+          {cameras.length > 1 && (
+            <Select
+              items={cameras.map((c) => ({ value: c.id, label: c.name }))}
+              value={primaryCamera.id}
+              onValueChange={(id) => id && setSelectedCameraId(id)}
+            >
+              <SelectTrigger size="sm" className="w-full" aria-label="Cambiar de cámara">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {cameras.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                    {c.route && <span className="text-black/45">· {c.route}</span>}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          <CameraLive camera={primaryCamera} />
+
+          {primaryOccupancy && (
+            <div className="flex items-center gap-2">
+              <span className="text-[12px] font-semibold text-black/50">Ocupación IA:</span>
+              <StatusPill
+                text={`${primaryOccupancy.text} · ${primaryOccupancy.percent}%`}
+                tone={primaryOccupancy.tone}
+              />
+            </div>
+          )}
+
+          {primaryStatus && (
+            <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[12px] sm:grid-cols-3">
+              <Detail
+                label="Video"
+                value={
+                  primaryStatus.stream.width
+                    ? `${primaryStatus.stream.codec} · ${primaryStatus.stream.width}×${primaryStatus.stream.height}`
+                    : "—"
+                }
+              />
+              <Detail
+                label="Capacidad"
+                value={
+                  selectedVehicle?.occupancy
+                    ? `${selectedVehicle.occupancy.capacity} pax`
+                    : primaryCamera.capacity
+                      ? `${primaryCamera.capacity} pax`
+                      : "Sin definir"
+                }
+              />
+              <Detail
+                label="Análisis"
+                value={
+                  primaryStatus.analysis.active
+                    ? `${primaryStatus.analysis.fps?.toFixed(1)} fps`
+                    : "Inactivo"
+                }
+              />
+              <Detail
+                label="Inferencia"
+                value={
+                  primaryStatus.analysis.inferenceMs
+                    ? `${Math.round(primaryStatus.analysis.inferenceMs)} ms`
+                    : "—"
+                }
+              />
+              <Detail label="Espectadores" value={primaryStatus.stream.viewers} />
+            </dl>
+          )}
+
+          <Link
+            href={`/cameras/${primaryCamera.id}`}
+            className="flex items-center gap-1 self-start text-[13px] font-medium text-[#1d7fe0] hover:underline"
+          >
+            Ver detalle y eventos de la cámara
+            <ChevronRightIcon className="size-3.5" aria-hidden />
+          </Link>
+        </section>
       </div>
 
       <Card>
@@ -115,141 +323,54 @@ export default function FleetPage() {
           <EventsList limit={10} />
         </CardContent>
       </Card>
-    </>
-  );
-}
-
-function Kpi({ label, value, alert = false }: { label: string; value: string | number; alert?: boolean }) {
-  return (
-    <div className="rounded-2xl border border-black/10 bg-white px-5 py-4">
-      <p className="text-[13px] font-semibold text-black/45">{label}</p>
-      <p className={`mt-1 text-3xl font-bold tabular-nums ${alert ? "text-red-700" : "text-black"}`}>{value}</p>
     </div>
   );
 }
 
-function TransmissionPill({ status }: { status: CameraStatusSummary | undefined }) {
-  if (!status) return <StatusPill text="Consultando…" />;
-  if (status.stream.online) {
-    const since = status.stream.onlineSince ? ` · desde ${formatClock(status.stream.onlineSince)}` : "";
-    return <StatusPill text={`En vivo${since}`} tone="success" />;
-  }
-  return status.stream.configured ? <StatusPill text="Sin señal" tone="error" /> : <StatusPill text="Configurando" tone="warning" />;
-}
-
-function BusRow({ bus, selected, onToggle }: { bus: Bus; selected: boolean; onToggle: () => void }) {
-  const { camera, status, people } = bus;
-  const level = people !== null && camera.capacity ? occupancy(people, camera.capacity) : null;
-  const online = status?.stream.online ?? false;
-
+function Kpi({
+  label,
+  value,
+  hint,
+  alert = false,
+}: {
+  label: string;
+  value: string | number;
+  hint?: string;
+  alert?: boolean;
+}) {
   return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-expanded={selected}
-      aria-controls="bus-panel"
-      className="-mx-2 my-1 flex w-[calc(100%+1rem)] items-center gap-3.5 rounded-xl px-2 py-3 text-left transition-colors hover:bg-black/[0.03] aria-expanded:bg-[#1d7fe0]/[0.07]"
-    >
-      <span
-        className={`flex size-11 shrink-0 items-center justify-center rounded-xl text-white ${
-          online ? "bg-[#1e3a8a]" : "bg-black/20"
+    <div className="rounded-xl border border-black/10 bg-white px-3.5 py-2.5">
+      <div className="flex items-center justify-between">
+        <p className="text-[12px] font-semibold text-black/45">{label}</p>
+        {hint && <span className="text-[10.5px] text-black/40">{hint}</span>}
+      </div>
+      <p
+        className={`mt-0.5 text-2xl font-bold tabular-nums ${
+          alert ? "text-red-700" : "text-black"
         }`}
       >
-        <BusFrontIcon className="size-5" aria-hidden />
-      </span>
-
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="flex items-baseline justify-between gap-3">
-          <span className="text-[15px] font-bold whitespace-nowrap text-black">{camera.name}</span>
-          {people === null ? (
-            <span className="text-[13px] font-semibold whitespace-nowrap text-black/35">Sin análisis</span>
-          ) : (
-            <span className="flex items-baseline gap-1 whitespace-nowrap">
-              <span className="text-2xl leading-none font-bold text-black tabular-nums">{people}</span>
-              <span className="text-[13px] font-semibold text-black/45">
-                {camera.capacity && `/ ${camera.capacity} `}
-                {people === 1 ? "pasajero" : "pasajeros"}
-              </span>
-            </span>
-          )}
-        </span>
-        <span className="truncate text-[13px] text-black/45">{camera.route ?? "Sin ruta asignada"}</span>
-        <span className="mt-1 flex flex-wrap gap-1.5">
-          <TransmissionPill status={status} />
-          {level && <StatusPill text={`${level.text} · ${level.percent}%`} tone={level.tone} />}
-        </span>
-      </span>
-
-      <ChevronRightIcon
-        className={`size-5 shrink-0 text-black/25 transition-transform ${selected ? "rotate-90 lg:rotate-0" : ""}`}
-        aria-hidden
-      />
-    </button>
+        {value}
+      </p>
+    </div>
   );
 }
 
-/** Cámara del bus seleccionado. El video (y su conexión WebRTC) solo existe mientras el panel está abierto. */
-function BusPanel({ bus, onClose }: { bus: Bus; onClose: () => void }) {
-  const { camera, status } = bus;
-  const ref = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    // En pantallas angostas el panel queda debajo de la lista: llevarlo a la vista.
-    ref.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, []);
-
-  return (
-    <section
-      id="bus-panel"
-      ref={ref}
-      aria-label={`Cámara de ${camera.name}`}
-      className="flex flex-col gap-4 rounded-2xl border border-black/10 bg-white p-4 lg:sticky lg:top-6"
-    >
-      <header className="flex items-start gap-3">
-        <div className="min-w-0 flex-1">
-          <h2 className="text-lg font-bold text-black">{camera.name}</h2>
-          <p className="text-[13px] text-black/45">{camera.route ?? "Sin ruta asignada"}</p>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Cerrar cámara"
-          className="-mt-1 -mr-1 flex size-10 items-center justify-center rounded-full text-black/45 hover:bg-black/5 hover:text-black"
-        >
-          <XIcon className="size-5" />
-        </button>
-      </header>
-
-      <CameraLive camera={camera} />
-
-      {status && (
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-[13px] sm:grid-cols-3">
-          <Detail label="Transmisión" value={<TransmissionPill status={status} />} />
-          <Detail
-            label="Video"
-            value={status.stream.width ? `${status.stream.codec} · ${status.stream.width}×${status.stream.height}` : "—"}
-          />
-          <Detail label="Capacidad" value={camera.capacity ? `${camera.capacity} pasajeros` : "Sin definir"} />
-          <Detail
-            label="Análisis"
-            value={status.analysis.active ? `${status.analysis.fps?.toFixed(1)} frames/s` : "Inactivo"}
-          />
-          <Detail
-            label="Inferencia"
-            value={status.analysis.inferenceMs ? `${Math.round(status.analysis.inferenceMs)} ms` : "—"}
-          />
-          <Detail label="Espectadores" value={status.stream.viewers} />
-        </dl>
-      )}
-
-      <Link
-        href={`/cameras/${camera.id}`}
-        className="flex items-center gap-1 self-start text-[15px] font-medium text-blue-600 hover:underline"
-      >
-        Ver detalle y eventos del bus
-        <ChevronRightIcon className="size-4" aria-hidden />
-      </Link>
-    </section>
+function TransmissionPill({
+  status,
+}: {
+  status: CameraStatusSummary | undefined;
+}) {
+  if (!status) return <StatusPill text="Consultando…" />;
+  if (status.stream.online) {
+    const since = status.stream.onlineSince
+      ? ` · ${formatClock(status.stream.onlineSince)}`
+      : "";
+    return <StatusPill text={`En vivo${since}`} tone="success" />;
+  }
+  return status.stream.configured ? (
+    <StatusPill text="Sin señal" tone="error" />
+  ) : (
+    <StatusPill text="Configurando" tone="warning" />
   );
 }
 

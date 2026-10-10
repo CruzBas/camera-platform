@@ -1,0 +1,68 @@
+@host = http://localhost:5189
+
+### Latest state of every bus
+GET {{host}}/api/v1/vehicles
+
+### Latest state of one bus (a Route 142 trunk bus in the mock fleet; ids are normalized, lower case also works)
+GET {{host}}/api/v1/vehicles/SJB-16959
+
+### Boarding and exit events in the last hour
+GET {{host}}/api/v1/vehicles/SJB-16959/events
+
+### Occupancy history in 1-minute buckets (defaults: last hour, 5m)
+GET {{host}}/api/v1/vehicles/SJB-16959/history?interval=1m
+
+### What an on-board device sends after processing video and sensor data
+POST {{host}}/api/v1/vehicles/SJB-1001/observations
+Content-Type: application/json
+X-Device-Key: dev-key-if-configured
+
+{
+  "timestamp": "2026-10-05T08:01:10-06:00",
+  "location": { "lat": 9.9352, "lon": -84.0431, "speedKmh": 22 },
+  "occupancy": { "passengerCount": 78, "capacity": 110, "source": "DOOR_COUNTER_3D" },
+  "doorEvents": [
+    { "door": 1, "boardings": 4, "alightings": 1,
+      "openedAt": "2026-10-05T07:59:02-06:00", "closedAt": "2026-10-05T07:59:40-06:00" }
+  ],
+  "device": { "cameraOnline": true, "firmware": "1.0.3" }
+}
+
+### Raw data from an OnboardComputerApp: GPS (NMEA 0183), door counter, vision results.
+### The API does all the calculations. Use a "sequence" higher than the last one sent and a
+### recent "sentAt" (NMEA sentences carry their own time and checksum; RMC has the date).
+POST {{host}}/api/v1/vehicles/SJB-16959/raw
+Content-Type: application/json
+X-Device-Key: dev-key-if-configured
+
+{
+  "sequence": 1,
+  "sentAt": "2026-10-01T00:15:12Z",
+  "gps": {
+    "format": "NMEA-0183",
+    "sentences": [
+      "$GPRMC,001510.00,A,0956.7918,N,08403.2106,W,0.0,87.5,011026,,,A*70",
+      "$GPGGA,001510.00,0956.7918,N,08403.2106,W,1,09,0.9,1191.0,M,,M,,*5A"
+    ]
+  },
+  "doorCounter": {
+    "format": "apc-door-events-v1",
+    "events": [
+      { "door": 1, "type": "DOOR_OPENED", "at": "2026-10-01T00:15:02Z" },
+      { "door": 1, "type": "COUNT", "in": 3, "out": 1, "at": "2026-10-01T00:15:09Z" },
+      { "door": 1, "type": "DOOR_CLOSED", "at": "2026-10-01T00:15:11Z" }
+    ]
+  },
+  "vision": {
+    "model": "bus-passengers-rfdetr-s-v1",
+    "camera": "cabin-front",
+    "frames": [
+      { "at": "2026-10-01T00:15:10.0Z", "detections": [
+        { "trackId": 12, "class": "sitting", "score": 0.88, "box": [401, 123, 495, 279] },
+        { "trackId": 15, "class": "standing", "score": 0.71, "box": [132, 80, 248, 352] } ] }
+    ]
+  }
+}
+
+### OpenAPI contract
+GET {{host}}/openapi/v1.json

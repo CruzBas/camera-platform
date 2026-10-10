@@ -153,7 +153,9 @@ export function useCameraDetections(cameraId: string) {
   return useLiveDetections([cameraId])[cameraId] ?? null;
 }
 
-/** Personas en un frame analizado. */
+/** Personas en un frame analizado (compatible con YOLO 'person' y RF-DETR 'sitting'/'standing'). */
 export function peopleIn(frame: DetectionFrame) {
-  return frame.detections.filter((d) => d.label === "person").length;
+  return frame.detections.filter(
+    (d) => d.label === "person" || d.label === "sitting" || d.label === "standing"
+  ).length;
 }

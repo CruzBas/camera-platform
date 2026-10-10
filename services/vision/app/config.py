@@ -8,6 +8,8 @@ class Settings:
     api_key: str
     stream_base_url: str
     model: str
+    detector: str
+    rfdetr_model_path: str
     analysis_fps: float
     confidence: float
 
@@ -23,6 +25,8 @@ class Settings:
             # conexión y este servicio no necesita sus credenciales.
             stream_base_url=os.environ.get("STREAM_BASE_URL", "rtsp://streaming:8554"),
             model=os.environ.get("MODEL", "yolo26n.pt"),
+            detector=os.environ.get("DETECTOR", "yolo").lower(),
+            rfdetr_model_path=os.environ.get("RFDETR_MODEL_PATH", "/app/models/custom/bus-passengers-rfdetr-s-v1.onnx"),
             # Frames analizados por segundo, independiente de los FPS de la cámara.
             analysis_fps=float(os.environ.get("ANALYSIS_FPS", "2")),
             confidence=float(os.environ.get("CONFIDENCE", "0.5")),

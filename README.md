@@ -80,10 +80,11 @@ Por cada frame recibido, `DetectionService`:
 | Página | Contenido |
 |--------|-----------|
 | `/login` | Inicio de sesión (cookie HttpOnly) |
-| `/` | «Flota en vivo»: todas las unidades con video, pasajeros y ocupación |
+| `/` | «Flota en vivo»: mapa interactivo de la red de Coronado + cámara de cabina siempre visible |
 | `/cameras` | Alta, edición y baja de cámaras, con su estado |
 | `/cameras/[id]` | Video con detecciones, estado del stream y del análisis, eventos de la cámara |
 | `/events` | Historial de eventos de todas las cámaras, actualizado en vivo |
+| `/rentabilidad` | «Rentabilidad operativa»: matriz ruta × hora, dial de equilibrio, tiempo por ocupación |
 
 En desarrollo, Next.js reenvía `/api` y `/hubs` a la API (`next.config.ts`), así la cookie de sesión
 funciona sin CORS.
@@ -169,19 +170,44 @@ cd apps/api && dotnet test             # dominio y casos de uso (eventos, valida
 scripts/test-camera-recovery.sh        # con la plataforma corriendo: caída de cámara, reconexión y reinicio del gateway
 ```
 
+## Características integradas (Hackathon Demo)
+
+### 1. Mapa de flota y Simulador con failover automático
+- **Mapa interactivo:** En la página principal (`/`), el mapa Leaflet carga el trazado real de rutas de Coronado (`public/routes/coronado-routes-osm.geojson`) y muestra la telemetría en tiempo real de 43 unidades con rumbo y nivel de ocupación.
+- **Failover automático (alta disponibilidad en vivo):** El proxy `/occupancy/*` en Next.js consulta prioritariamente la API remota en la nube (`https://lg0618pp-002-site2.htempurl.com`). Si la conexión a Internet falla o tiene alta latencia (> 2,5 s), conmuta transparentemente y sin intervención al contenedor local de simulación (`services/occupancy` en el puerto 5190).
+
+### 2. Selector de fuente de video (En vivo ↔ Demo grabado)
+En el visor de la cámara, el usuario puede alternar entre:
+- **En vivo (WHEP):** El stream WebRTC en tiempo real de la cámara IP / webcam con detección en tiempo real.
+- **Demo grabado (RF-DETR):** Reproduce el clip pregrabado (`la_bus_highlights.mp4`) sincronizado con el reloj Unix y con las cajas delimitadoras de pasajeros sentados y de pie decodificadas de su análisis. Si la cámara en vivo no tiene señal, el reproductor muestra una sugerencia rápida para cambiar a la grabación.
+
+### 3. Selector de detector de visión (YOLO ↔ RF-DETR)
+El servicio de visión (`services/vision`) permite alternar el modelo de detección mediante la variable de entorno `DETECTOR` en `.env`:
+- `DETECTOR=yolo` (por defecto): Inferencia con Ultralytics YOLO (`person`).
+- `DETECTOR=rfdetr`: Inferencia ONNX con RF-DETR distinguiendo `sitting` (sentados) y `standing` (de pie). Coloca el modelo ONNX en `./models/bus-passengers-rfdetr-s-v1.onnx` (montado en el contenedor).
+- Ambos modelos notifican conteos compatibles al backend (`person`, `sitting` y `standing` computan como pasajeros).
+
+### 4. Módulo de Rentabilidad Operativa
+Ubicado en `/rentabilidad` en la barra lateral:
+- Aplica las tarifas oficiales de la ARESEP (Resolución RE-0115-IT-2026: ₡460 para R142 y ₡400 para ramales).
+- Calcula ingresos estimados, costo de operación por hora-bus (₡12 950 por defecto) y pérdidas bajo el punto de equilibrio.
+- Permite ajustar los supuestos en vivo mediante el diálogo de "Supuestos de cálculo".
+- Gráficos integrados: dial de abordajes por hora-bus, gráfico horario, mapa de calor ruta × hora y desglose de tiempo por nivel de ocupación.
+
 ## Servicios y puertos (solo en 127.0.0.1)
 
 | Servicio | Puerto | Uso |
 |----------|--------|-----|
-| Dashboard (`npm run dev`) | 3000 | Interfaz; reenvía `/api` y `/hubs` a la API |
+| Dashboard (`npm run dev`) | 3000 | Interfaz; reenvía `/api`, `/hubs` y `/occupancy` |
 | API | 5080 | REST, login, SignalR (`/hubs/events`), `/health` |
 | MediaMTX | 8554 / 8889 / 8189 | RTSP / señalización WebRTC / media WebRTC |
-| Visión | 8000 | `/health`, `/status` (FPS, frames analizados, tiempo de inferencia por cámara) |
+| Visión | 8000 | `/health`, `/status` (detección YOLO o RF-DETR) |
+| Occupancy Simulator | 5190 | Simulador de flota local (respaldo offline automático) |
 | PostgreSQL | 5433 | Base de datos (5433 para no chocar con un PostgreSQL local) |
 
-Ajustes del análisis en `.env`: `ANALYSIS_FPS` (frames analizados por segundo y por cámara) e
-`INFERENCE_THREADS` (hilos de PyTorch; más hilos no es mejor, porque compiten con la decodificación
-del video).
+Ajustes del análisis en `.env`: `ANALYSIS_FPS` (frames analizados por segundo y por cámara),
+`INFERENCE_THREADS` (hilos de inferencia) y `DETECTOR=yolo|rfdetr`.
+
 
 ## API
 

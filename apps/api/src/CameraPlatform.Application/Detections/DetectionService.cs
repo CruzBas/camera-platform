@@ -16,7 +16,8 @@ public sealed class DetectionService(
 
     public const int MaxEventsPage = 200;
     private const int MaxDetectionsPerFrame = 100;
-    private const string PersonLabel = "person";
+    private static bool IsPassengerLabel(string label) =>
+        label is "person" or "sitting" or "standing";
 
     /// <summary>Procesa un frame analizado. Devuelve false si la cámara no existe.</summary>
     public async Task<bool> IngestAsync(Guid cameraId, DetectionFrame frame, CancellationToken ct)
@@ -28,7 +29,7 @@ public sealed class DetectionService(
         analysis.Record(cameraId, frame.InferenceMs);
         await notifier.DetectionsAsync(cameraId, frame, ct);
 
-        var persons = frame.Detections.Where(d => d.Label == PersonLabel).ToList();
+        var persons = frame.Detections.Where(d => IsPassengerLabel(d.Label)).ToList();
         if (persons.Count == 0) return true;
 
         // Hora del servidor: el reloj del servicio de visión no define la línea de tiempo de los eventos.
