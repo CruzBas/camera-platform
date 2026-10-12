@@ -41,7 +41,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <p className="truncate px-2 text-[13px] text-black/45">{user.email}</p>
             <Button variant="ghost" className="justify-start" onClick={logout}>
               <LogOutIcon />
-              Cerrar sesión
+              Cerrar Sesión
             </Button>
           </div>
         )}
@@ -71,7 +71,7 @@ function NavLinks({ pathname }: { pathname: string | null }) {
             aria-current={active ? "page" : undefined}
             className="flex items-center gap-3 rounded-full px-3 py-2 text-[15px] font-medium text-black/45 hover:bg-black/5 hover:text-black aria-[current=page]:bg-[#1d7fe0]/10 aria-[current=page]:font-semibold aria-[current=page]:text-[#1d7fe0]"
           >
-            <Icon className="size-5" />
+            <Icon className="size-7" />
             {label}
           </Link>
         );
